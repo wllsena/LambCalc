@@ -1,6 +1,6 @@
 #lang racket
 
-(require "LambdaCalc.rkt")
+(require "lambcalc.rktt")
 
 ;---
 
