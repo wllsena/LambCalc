@@ -1,26 +1,38 @@
-#lang racket
+#lang br
 
-(provide % @ ~ $! $!! $!.!! ! !! !.!!)
+(provide % ? ~ $! $!! $!.!! ! !! !.!!
+         read-syntax  #%module-begin #%top-interaction)
 
-(require racket/syntax)
+(require fancy-app racket/syntax)
 
 ;---
 
-(define-match-expander ?equal?
-  (syntax-rules ()
-    [(?equal? var)
-     (? (λ (expr) (equal? var expr)))]))
+(define (read-syntax path port)
+  #`(module main "lambcalc.rkt"
+      #,@((compose
+           (format-datums '(~a) _)
+           (remove* '("") _)
+           (map (regexp-replaces
+                 _ '([#rx"(.*)=(.*)" "% \\1 \\2"]
+                     [#rx"([^%|^ ]) (.*)" "\\1 (\\2)"]
+                     [#rx"λ([^.]*)\\." "λ (\\1)"]
+                     [#rx";.*" ""]))
+                _)
+           port->lines)
+          port)))
+
+;---
 
 (define-match-expander ?href
   (syntax-rules ()
     [(?href ht pat)
-     (? (λ (key) (hash-has-key? ht key))
-        (app (λ (key) (hash-ref ht key)) pat))]))
+     (? (hash-has-key? ht _)
+        (app (hash-ref ht _) pat))]))
 
 (define-match-expander ?assoc
   (syntax-rules ()
     [(?assoc lst pat)
-     (app (λ (v) (assoc v lst))
+     (app (assoc _ lst)
           (? and (app cadr pat)))]))
 
 ;---
@@ -29,7 +41,7 @@
   (let ([to (α to #f)])
     (letrec ([lex-rplc
               (match-lambda 
-                [(?equal? from)
+                [(? (equal? _ from))
                  to]
                 [(? symbol? expr)
                  expr]
@@ -67,7 +79,7 @@
     [(box (app add1 ?n))
      (set-box! ?bn ?n)
      (format-symbol "?arg~a" ?n)]
-    [#f
+    [_
      (gensym '?arg)]))
 
 (define (α expr [?bn (box -1)] [hargs (make-immutable-hash)])
@@ -140,10 +152,10 @@
   (α (st-β (lazy-eval expr))))
 
 (define (def key val)
-  (set! lst-defs (cons (list val key) lst-defs)))
+  (set-defs! (cons (list val key) lst-defs)))
 
 (define (clear-defs)
-  (set! lst-defs null))
+  (set-defs! null))
 
 ;---
 
@@ -166,7 +178,7 @@
 (define-syntax-rule (% key expr)
   (def (syntax->datum #'key) (syntax->datum #'expr)))
 
-(define-syntax-rule (@)
+(define-syntax-rule (?)
   lst-defs)
 
 (define-syntax-rule (~)

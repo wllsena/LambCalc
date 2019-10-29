@@ -2,7 +2,7 @@
 
 (require "lambcalc.rkt")
 
-;---
+; % ? ~ $! $!! $!.!! ! !! !.!!
 
 (% N0 (λ (f x) x))
 (% N1 (λ (f x) (f x)))
@@ -56,8 +56,7 @@
 
 (% FAC (Y (λ (f n) IS-0 n N1 (MULT n (f (PRED n))))))
 
-(% FIB2 (U (λ (f n) LEQ n N2 N1 (PLUS (U f (PRED n))
-                                     (U f (SUB n N2))))))
+(% FIB2 (U (λ (f n) LEQ n N2 N1 (PLUS (U f (PRED n)) (U f (SUB n N2))))))
 
 ($!)
 
@@ -65,3 +64,5 @@
 
 (! (EQUAL (FIB1 N6) (FIB2 N6)))
 (!.!! (FAC N3))
+
+;---
