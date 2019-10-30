@@ -119,11 +119,10 @@
   (set! lst-defs lst))
 
 (define (expand-defs expr)
-  (foldl (λ (val-key expr)
-           (match-let ([(list val key) val-key])
-             `((λ ,key ,expr) ,val)))
-         expr
-         lst-defs))
+  (for/fold ([expr expr])
+            ([df   lst-defs])
+    (match-let ([(list val key) df])
+      `((λ ,key ,expr) ,val))))
 
 (define rev-rw
   (match-lambda
