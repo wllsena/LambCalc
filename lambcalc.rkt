@@ -89,8 +89,8 @@
     [`(,expr1 ,expr2)
      `(,(α expr1 ?bn hargs) ,(α expr2 ?bn hargs))]
     [`(λ ,arg ,body)
-     (let ([?arg (get-?arg ?bn)])
-       `(λ ,?arg ,(α body ?bn (hash-set hargs arg ?arg))))]))
+     (define ?arg (get-?arg ?bn))
+     `(λ ,?arg ,(α body ?bn (hash-set hargs arg ?arg)))]))
 
 ;---
 
