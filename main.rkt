@@ -79,15 +79,18 @@
     [_
      (gensym '?arg)]))
 
+(define (?arg? sym)
+  (regexp-match #rx"^\\?arg.*" (format "~a" sym)))
+
 (define (α expr [?bn (box -1)] [hargs (make-immutable-hash)])
   (match expr
-    [(or (?href hargs val) (? symbol? val))
-     val]
-    [`(,expr1 ,expr2)
-     `(,(α expr1 ?bn hargs) ,(α expr2 ?bn hargs))]
     [`(λ ,arg ,body)
      (define ?arg (get-?arg ?bn))
-     `(λ ,?arg ,(α body ?bn (hash-set hargs arg ?arg)))]))
+     `(λ ,?arg ,(α body ?bn (hash-set hargs arg ?arg)))]
+    [`(,expr1 ,expr2)
+     `(,(α expr1 ?bn hargs) ,(α expr2 ?bn hargs))]
+    [(or (?href hargs val) (? ?arg? val))
+     val]))
 
 ;---
 
@@ -123,18 +126,24 @@
 
 (define rev-rw
   (match-lambda
-    [(or (app α (?assoc lst-defs val)) (? symbol? val))
+    [(or (?assoc lst-defs val)
+         (? symbol? val)
+         (app α (?assoc lst-defs val)))
      val]
 
-    [`(λ ,arg ,(app rev-rw `(λ (,args ...) ,body)))
-     `(λ (,arg ,@args) ,body)]   
-    [`(λ ,arg ,body)
+    [`(λ ,arg ,(app rev-rw `(λ (,args ...) ,body ...)))
+     `(λ (,arg ,@args) ,@body)]
+    [`(λ ,arg ,(? symbol? body))
      `(λ (,arg) ,(rev-rw body))]
-    
-    [`((,expr1 ,expr2) ,expr3)
-     `(,(rev-rw expr1) ,(rev-rw expr2) ,(rev-rw expr3))]
+    [`(λ ,arg ,body)
+     `(λ (,arg) ,@(rev-rw body))]
+
+    [`(,(? symbol? expr1) ,expr2)
+     `(,(rev-rw expr1) ,(rev-rw expr2))]
+    [`((λ ,exprs ...) ,expr2)
+     `(,(rev-rw `(λ ,@exprs)) ,(rev-rw expr2))]
     [`(,expr1 ,expr2)
-     `(,(rev-rw expr1) ,(rev-rw expr2))]))
+     `(,@(rev-rw expr1) ,(rev-rw expr2))]))
 
 ;---
 
