@@ -2,7 +2,7 @@
 
 (require "lambcalc.rkt")
 
-; % ? ~ $! $!! $!.!! ! !! !.!!
+(use-rewrite #t)
 
 (% N0 (λ (f x) x))
 (% N1 (λ (f x) (f x)))
@@ -19,10 +19,10 @@
 
 (% SUCC  (λ (n f x) f (n f x)))
 (% PLUS  (λ (n m) m SUCC n))
-(% MULT  (λ (n m) ((m (PLUS n)) N0))) 
+(% MULT  (λ (n m) m (PLUS n) N0))
 (% TRUE  (λ (t f) t))
 (% FALSE (λ (t f) f))
-(% IS-0  (λ (x) (x (λ (y) FALSE)) TRUE))
+(% IS-0  (λ (x) x (λ (y) FALSE) TRUE))
 (% PAIR  (λ (m n b) b m n))
 (% FST   (λ (p) p TRUE))
 (% SCD   (λ (p) p FALSE))
@@ -32,11 +32,11 @@
 (% AND   (λ (n m) n m n))
 (% OR    (λ (n m) n n m))
 (% NOT   (λ (b t f) b f t))
-(% EQUAL (λ (n m) (AND (LEQ n m) (LEQ m n))))
+(% EQUAL (λ (n m) AND (LEQ n m) (LEQ m n)))
 
 ;---
 
-(% NEXT (λ p (PAIR (PLUS (FST p) (SCD p)) (FST p))))
+(% NEXT (λ p PAIR (PLUS (FST p) (SCD p)) (FST p)))
 (% FIB1 (λ n SCD (n NEXT (PAIR N1 N0))))
 
 ;---
@@ -62,7 +62,11 @@
 
 ;---
 
-(! (EQUAL (FIB1 N6) (FIB2 N6)))
-(!.!! (FAC N3))
+(!    EQUAL (FIB1 N6) (FIB2 N6))
+(!.!! FAC N3)
+
+;---
+
+(eval-from-string !.!! "FAC N3")
 
 ;---
