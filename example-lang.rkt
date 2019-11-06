@@ -1,5 +1,7 @@
 #lang reader "lambcalc-lang.rkt"
 
+use-rewrite #t
+
 N0 = λ f x . x
 N1 = λ f x . f x
 N2 = λ f x . f (f x)
