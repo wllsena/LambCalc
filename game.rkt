@@ -5,12 +5,8 @@
 
 ;---
 
-(define width  1000)
-(define heigth 1000)
-
-;---
-
-(struct kin (vars children))
+(define cv-width  800)
+(define cv-heigth 600)
 (define colors
   (list
    (make-object color% 225 169 84)
@@ -20,18 +16,11 @@
    (make-object color% 1   75  13)
    (make-object color% 166 50  50 3/4)))
 
-;----
+;---
 
-(define expression      null)
-(define families-width  (make-hash))
-(define families-heigth (make-hash))
-(define kinship         (make-hash))
-(define family-posit    0)
+(define expression    null)
 
-(define families-coord  (make-hash))
-(define families-color  (make-hash))
-
-;----
+;---
 
 (define (failed-to-get-expr exn)
   (send message set-label "INVALIDE EXPRESSION!")
@@ -39,94 +28,156 @@
 
 (define (get-expr)
   (define text (send text-field get-value))
+  (send message set-label "Hello")
   (with-handlers ([exn:fail? failed-to-get-expr])
     (set! expression (rev-rw (α (rw-expr (string->expr text)))))))
 
 ;---
 
-(define (get-family-dimensions expr curr-posit)
-  (match expr
-    [(? symbol?)
-     (hash-set! kinship curr-posit #f)
-     (values 100 100)]
-    [(or `(λ (,var ...) ,body ...)
-         `(,body ... ,var ...))
-     (define children (map get-family-specs body))
-     (hash-set! kinship curr-posit (kin var children))
-     (values
-      (max 200 (for/sum ([child (in-list children)])
-                 (hash-ref families-width child)))
-      (+ (* 100 (max 1 (length var)))
-         (apply max (for/list ([child (in-list children)])
-                      (hash-ref families-heigth child)))))]))
-
-(define (get-family-specs expr)
-  (define curr-posit family-posit)
-  (set! family-posit (add1 curr-posit))
-  (define-values (family-width family-heigth)
-    (get-family-dimensions expr curr-posit))
-  (hash-set! families-width  curr-posit (* 11/10 family-width))
-  (hash-set! families-heigth curr-posit (* 11/10 family-heigth))
-  curr-posit)
-
-(define (get-families-specs)
-  (set! families-width  (make-hash))
-  (set! families-heigth (make-hash))
-  (set! kinship         (make-hash))
-  (set! family-posit    0)
-  (get-family-specs expression)
-  (void))
+(define children      (make-hash))
+(define arguments     (make-hash))
+(define vars          (make-hash))
+(define posit-counter 0)
 
 ;---
 
-(define (get-color father-color)          
+(define (get-affiliation expr)
+  (define curr-posit posit-counter)
+  (set! posit-counter (add1 curr-posit))
+  (define-values (body args)
+    (match expr
+      [(and (? symbol?)
+            (app (hash-ref vars _) (cons lamb-posit arg-posit)))
+       (hash-update! arguments lamb-posit
+                     (list-update _ arg-posit (cons curr-posit _)))
+       (values null null)]
+      [`(λ (,args ...) ,body ...)
+       (for ([arg       (in-list args)]
+             [arg-posit (in-naturals)])
+         (hash-set! vars arg (cons curr-posit arg-posit)))
+       (values body (map (λ _ null) args))]
+      [`(,body ...)
+       (values body null)]))
+  (hash-set! arguments curr-posit args)
+  (define childs (map get-affiliation body))
+  (hash-set! children curr-posit childs)
+  curr-posit)
+
+(define (get-affiliations)
+  (set! children  (make-hash))
+  (set! arguments (make-hash))
+  (set! vars      (make-hash))
+  (set! posit-counter 0)
+  (get-affiliation expression)
+  (set! vars null))
+
+;---
+
+(define bgs-width  (make-hash))
+(define bgs-heigth (make-hash))
+
+;---
+
+(define (get-size curr-posit)
+  (define childs (hash-ref children curr-posit))
+  (define args   (hash-ref arguments curr-posit))
+  (for-each get-size childs)
+  (define-values (width heigth) 
+    (if (and (null? childs) (null? args))
+        (values 100 100)
+        (values
+         (max 200
+              (apply + (map (hash-ref bgs-width _) childs)))
+         (+ (* 100 (length args))
+            (apply max (map (hash-ref bgs-heigth _) childs))))))
+  (hash-set! bgs-width curr-posit (* 11/10 width))
+  (hash-set! bgs-heigth curr-posit (* 11/10 heigth)))
+
+(define (get-sizes)
+  (set! bgs-width (make-hash))
+  (set! bgs-heigth (make-hash))
+  (get-size 0))
+
+;---
+
+(define bgs-dimensions (make-hash))
+(define lamb-size 0)
+
+;---
+
+(define (get-dimension x y width heigth curr-posit)
+  (hash-set! bgs-dimensions curr-posit (list x y width heigth))
+  (define childs (hash-ref children curr-posit))
+  (define args   (hash-ref arguments curr-posit))
+  (unless (null? childs)
+    (let* ([childs-len (length childs)]
+           [space-wd   (if (= childs-len 1)
+                           (/ width 4)
+                           (/ (* 1/11 width) (add1 childs-len)))]
+           [spaces-hg  (+ y (/ (+ heigth (* lamb-size (length args))) 2))])
+      (for/fold ([spaces-wd space-wd])
+                ([child     (in-list childs)])
+        (define child-wd (hash-ref bgs-width  child))
+        (define child-hg (hash-ref bgs-heigth child))
+        (get-dimension (+ spaces-wd x) (- spaces-hg (/ child-hg 2))
+                       child-wd child-hg child)
+        (+ spaces-wd space-wd child-wd)))))
+
+(define (get-dimensions)
+  (set! bgs-dimensions (make-hash))
+  (define normalizer
+    (min (/ cv-width  (hash-ref bgs-width 0))
+         (/ cv-heigth (hash-ref bgs-heigth 0))))
+  (set! lamb-size (* normalizer 100)) 
+  (hash-for-each bgs-width
+                 (λ (key val)
+                   (hash-set! bgs-width key (* normalizer val))))
+  (hash-for-each bgs-heigth
+                 (λ (key val)
+                   (hash-set! bgs-heigth key (* normalizer val))))
+  (define root-width  (hash-ref bgs-width 0))
+  (define root-heigth (hash-ref bgs-heigth 0))
+  (get-dimension (/ (- cv-width root-width) 2)
+                 (/ (- cv-heigth root-heigth) 2)
+                 root-width root-heigth 0))
+
+;---
+
+(define (in-the-bg? x y curr-posit)
+  (match-let ([(list (app (- x _) x*) (app (- y _) y*) width heigth)
+               (hash-ref bgs-dimensions curr-posit)])
+    (and (> x* 0) (> width x*) (> y* 0) (> heigth y*))))
+
+(define (match-background x y)
+  (let loop ([curr-posit 0])
+    (define childs         (hash-ref children curr-posit))
+    (define matching-child (findf (in-the-bg? x y _) childs))
+    (if matching-child
+        (loop matching-child)
+        curr-posit)))
+
+;---
+
+(define bgs-color (make-hash))
+
+;---
+
+(define (one-color-available father-color)          
   (define available-colors
     (remove father-color '(0 1 2 3 4)))
   (list-ref available-colors (random 4)))
 
+(define (get-bg-color curr-posit father-color)
+  (define color  (one-color-available father-color))
+  (define childs (hash-ref children curr-posit))
+  (hash-set! bgs-color curr-posit color)
+  (for-each (get-bg-color _ color) childs))
+
+(define (get-bgs-color)
+  (set! bgs-color (make-hash))
+  (get-bg-color 0 5))
+
 ;---
-#|
-(define (get-family-coord2 x y width heigth family-posit)
-  (define coord (list x y width heigth))
-  (define children
-    (when (hash-has-key? kinship family-posit)
-      (match-define (kin vars children) (hash-ref kinship family-posit))
-      (let* ([family-len (add1 (length children))]
-             [vars-len   (length vars)]
-             [space-w    (if (> family-len 2)
-                             (/ (* 1/11 width) family-len)
-                             (/ width 4))]
-             [spaces-w   0]
-             [spaces-h   (+ y (/ (+ heigth (* 110 (length vars))) 2))])
-        (for/list ([child (in-list children)])
-          (define family-width  (hash-ref families-width  child))
-          (define family-heigth (hash-ref families-heigth child))
-          (set! spaces-w (+ spaces-w space-w family-width))
-          (get-family-coord (- (+ spaces-w x) family-width)
-                            (- spaces-h (/ family-heigth 2))
-                            family-width
-                            family-heigth
-                            child)))))
-  (family-coord coord (if (void? children) null children)))
-|#
-(define (get-families-coord x y width heigth [curr-posit 0])
-  (hash-set! families-coord curr-posit (list x y width heigth))
-  (define curr-kin (hash-ref kinship curr-posit))
-  (when curr-kin
-    (match-define (kin vars children) curr-kin)
-    (let* ([family-len (add1 (length children))]
-           [space-w    (if (> family-len 2)
-                           (/ (* 1/11 width) family-len)
-                           (/ width 4))]
-           [spaces-w   0]
-           [spaces-h   (+ y (/ (+ heigth (* 110 (length vars))) 2))])
-      (for/fold ([spaces-w space-w])
-                ([child    (in-list children)])
-        (define family-width  (hash-ref families-width  child))
-        (define family-heigth (hash-ref families-heigth child))
-        (get-families-coord (+ spaces-w x) (- spaces-h (/ family-heigth 2))
-                            family-width family-heigth child)
-        (+ spaces-w space-w family-width)))))
 
 (define (draw-rounded-rectangle dc x y width heigth)
   (let* ([path     (new dc-path%)]
@@ -135,7 +186,7 @@
                            (* width x1) (* heigth y1)
                            (* width x2) (* heigth y2)
                            (* width x3) (* heigth y3)))])
-    (send path move-to 0 (/ heigth 10))
+    (send path move-to 0 (* 0.1 heigth))
     (curve-to 0     0.05  0.05  0     0.1   0)
     (curve-to 0.2   -0.02 0.8   -0.02 0.9   0)
     (curve-to 0.95  0     1     0.05  1     0.1)
@@ -147,42 +198,20 @@
     (send path translate x y)
     path))
 
-(define (draw-backgrounds dc coord color)
-  (match-define (list x y width heigth) coord)
+(define (draw-bg dc color curr-posit)
+  (match-define (list x y width heigth)
+    (hash-ref bgs-dimensions curr-posit))
   (send dc set-pen "DarkGray" 1 'hilite)
   (send dc set-brush (list-ref colors color) 'solid)
   (define rect-path (draw-rounded-rectangle dc x y width heigth))
   (send dc draw-path rect-path))
-  
-(define (draw-family dc [first-posit 0])
-  (let loop ([father-posit first-posit]
-             [father-color 4])
-    (let ([coord    (hash-ref families-coord father-posit)]
-          [color    (get-color father-color)]
-          [curr-kin (hash-ref kinship father-posit)])
-      (draw-backgrounds dc coord color)
-      (when curr-kin 
-        (for-each (loop _ color) (kin-children curr-kin))))))
+
+(define (draw-bgs dc [curr-posit 0])
+  (define color (hash-ref bgs-color curr-posit))
+  (draw-bg dc color curr-posit)
+  (for-each (draw-bgs dc _) (hash-ref children curr-posit)))
 
 ;---
-
-(define (in-the-background? x y curr-posit)
-  (match-let ([(list (app (- x _) x*) (app (- y _) y*) width heigth)
-               (hash-ref families-coord curr-posit)])
-    (and (> x* 0) (> width x*) (> y* 0) (> heigth y*))))
-
-(define (match-family x y)
-  (let loop ([father-posit 0])
-    (define curr-kin (hash-ref kinship father-posit))
-    (if curr-kin
-        (let ([matching-child (findf (in-the-background? x y _)
-                                     (kin-children curr-kin))])
-          (if matching-child
-              (loop matching-child)
-              father-posit))
-        father-posit)))
-
-;--- Frame
 
 (define frame
   (new frame%
@@ -199,64 +228,53 @@
 (define text-field
   (new text-field% [parent panel]
        [label "Lambda expression: "]
-       [init-value "(λ x . x) (λ y . y)"]))
+       [init-value "(λ x y . x (λ z . z y))"]))
 
 (define button
   (new button% [parent panel]
-       [label "Go"]
-       [callback (λ _ (send canvas draw))]))
+       [label "Run!"]
+       [callback (λ _ (when (get-expr)
+                        (send canvas draw)))]))
 
-;--- Canvas
-
+;---
 
 (define canvas
   (new
    (class canvas%
      (inherit get-dc)
 
-     (define scale-width  0)
-     (define scale-heigth 0)
-
-     (define/private (get-x event)
-       (/ (send event get-x) scale-width))
-
-     (define/private (get-y event)
-       (/ (send event get-y) scale-heigth))
-   
      (define/override (on-event evt)
        (define dc (get-dc))
        (cond
          [(send evt button-up?)
-          (define family-posit (match-family (get-x evt) (get-y evt)))
-          (draw-backgrounds dc (hash-ref families-coord family-posit) 5)
+          (define bg-posit (match-background (send evt get-x)
+                                             (send evt get-y)))
+          (draw-bg dc 5 bg-posit)
           (sleep/yield 0.5)
-          (draw-family dc family-posit)]
+          (draw-bgs dc bg-posit)]
          [(send evt button-down?)]
          [(send evt dragging?)]
          [(send evt moving?)]))
      
-     (define/public (redraw)
-       (define root-width  (hash-ref families-width 0))
-       (define root-heigth (hash-ref families-heigth 0))
-       (define dc         (get-dc))
-       (set! scale-width  (/ width  root-width))
-       (set! scale-heigth (/ heigth root-heigth))
+     (define/public (draw)
+       (get-affiliations)
+       (get-sizes)
+       (get-dimensions)
+       (get-bgs-color)
+       (define dc (get-dc))
        (send dc set-background "LightGray")
        (send dc clear)
-       (send dc set-scale scale-width scale-heigth)
-       (get-families-coord 0 0 root-width root-heigth)
-       (draw-family dc))
-
-     (define/public (draw)
-       (when (get-expr)
-         (get-families-specs)
-         (redraw)))
+       (draw-bgs dc))
       
      (super-new
-      [parent         frame]
-      [min-width      width]
-      [min-height     heigth]
-      [paint-callback (λ _ (draw))]))))
+       [parent         frame]
+       [min-width      (+ 20 cv-width)]
+       [min-height     (+ 20 cv-heigth)]
+       [paint-callback
+        (λ (_ dc)
+          (send dc set-origin 10 10)
+          (get-expr)
+          (draw))]))))
 
 ;---
 
