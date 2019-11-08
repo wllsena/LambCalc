@@ -19,7 +19,8 @@
 
 ;---
 
-(define expression    null)
+(define root 0)
+(define expression null)
 
 ;---
 
@@ -43,7 +44,7 @@
 (define parents       (make-hash))
 (define arguments     (make-hash))
 (define vars          (make-hash))
-(define posit-counter 0)
+(define posit-counter root)
 
 ;---
 
@@ -59,30 +60,29 @@
        (hash-update! arguments lamb-posit
                      (list-update _ arg-posit
                                   (append _ (list curr-posit))))
-       (values null null)]
+       (values null #f)]
       [`(λ (,args ...) ,body ...)
        (for ([arg       (in-list args)]
              [arg-posit (in-naturals)])
          (hash-set! vars arg (cons curr-posit arg-posit)))
        (values body (map (λ _ null) args))]
       [`(,body ...)
-       (values body '(()))]))
-  
+       (values body null)]))
   (hash-set! arguments curr-posit args)
   (define childs (map get-affiliation body))
   (for-each (hash-set! parents _ curr-posit) childs)
   (hash-set! children curr-posit childs)
   curr-posit)
 
-(define (get-affiliations )
+(define (get-affiliations)
   (hash-clear! expressions)
-  (hash-clear! children   )
-  (hash-clear! parents    )
-  (hash-clear! arguments  )
-  (hash-clear! vars       )
-  (set! posit-counter 0)
+  (hash-clear! children)
+  (hash-clear! parents)
+  (hash-clear! arguments)
+  (hash-clear! vars)
+  (set! posit-counter root)
   (get-affiliation expression)
-  (hash-clear! vars       ))
+  (hash-clear! vars))
   
 
 ;---
@@ -97,12 +97,12 @@
   (define args   (hash-ref arguments curr-posit))
   (for-each get-size childs)
   (define-values (width heigth) 
-    (if (and (null? childs) (null? args))
+    (if (and (not args) (null? childs))
         (values 100 100)
         (values
          (max 200
               (apply + (map (hash-ref bgs-width _) childs)))
-         (+ (* 100 (length args))
+         (+ (* 100 (max 1 (length args)))
             (apply max (map (hash-ref bgs-heigth _) childs))))))
   (hash-set! bgs-width curr-posit (* 11/10 width))
   (hash-set! bgs-heigth curr-posit (* 11/10 heigth)))
@@ -110,7 +110,7 @@
 (define (get-sizes)
   (hash-clear! bgs-width )
   (hash-clear! bgs-heigth)
-  (get-size 0))
+  (get-size root))
 
 ;---
 
@@ -126,7 +126,9 @@
   (unless (null? childs)
     (let* ([childs-len (length childs)]
            [space-wd   (/ (* 1/11 width) (add1 childs-len))]
-           [spaces-hg  (+ y (/ (+ heigth (* lamb-size (length args))) 2))])
+           [spaces-hg  (+ y (/ (+ heigth
+                                  (* lamb-size (max 1 (length args))))
+                               2))])
       (cond
         [(= childs-len 1)
          (define child    (car childs))
@@ -147,8 +149,8 @@
 (define (get-dimensions)
   (hash-clear! bgs-dimensions)
   (define normalizer
-    (min (/ cv-width  (hash-ref bgs-width 0))
-         (/ cv-heigth (hash-ref bgs-heigth 0))))
+    (min (/ cv-width  (hash-ref bgs-width root))
+         (/ cv-heigth (hash-ref bgs-heigth root))))
   (set! lamb-size (* normalizer 100)) 
   (hash-for-each bgs-width
                  (λ (key val)
@@ -156,11 +158,11 @@
   (hash-for-each bgs-heigth
                  (λ (key val)
                    (hash-set! bgs-heigth key (* normalizer val))))
-  (define root-width  (hash-ref bgs-width 0))
-  (define root-heigth (hash-ref bgs-heigth 0))
+  (define root-width  (hash-ref bgs-width root))
+  (define root-heigth (hash-ref bgs-heigth root))
   (get-dimension (/ (- cv-width root-width) 2)
                  (/ (- cv-heigth root-heigth) 2)
-                 root-width root-heigth 0))
+                 root-width root-heigth root))
 
 ;---
 
@@ -172,7 +174,7 @@
          (> y* var-y) (> (- heigth var-y) y*))))
 
 (define (match-background x y)
-  (let loop ([curr-posit 0])
+  (let loop ([curr-posit root])
     (define childs         (hash-ref children curr-posit))
     (define matching-child (findf (in-the-bg? x y _) childs))
     (if matching-child
@@ -198,7 +200,7 @@
 
 (define (get-bgs-color)
   (hash-clear! bgs-color)
-  (get-bg-color 0 5))
+  (get-bg-color root 5))
 
 ;---
 
@@ -229,7 +231,7 @@
   (define rect-path (draw-rounded-rectangle dc x y width heigth))
   (send dc draw-path rect-path))
 
-(define (draw-bgs dc [curr-posit 0])
+(define (draw-bgs dc [curr-posit root])
   (define color (hash-ref bgs-color curr-posit))
   (draw-bg dc curr-posit color)
   (for-each (draw-bgs dc _) (hash-ref children curr-posit)))
@@ -253,18 +255,18 @@
        [label "Lambda expression: "]
        [init-value "(λ x . x) (λ x . x)"]))
 
-(define button
+(define button-run
   (new button% [parent panel]
        [label "Run!"]
-       [callback (λ _ (when (get-expr)
-                        (send canvas draw)))]))
+       [callback (λ _ (send canvas draw))]))
+
+(define button-rm-elders
+  (new button% [parent panel]
+       [label "Retire Elders"]
+       [callback (λ _ (remove-elders root)
+                   (send canvas redraw))]))
 
 ;---
-
-(define (display-answer dc bg-posit color)
-  (draw-bg dc bg-posit color)
-  (sleep 1/3)
-  (draw-bgs dc bg-posit))
 
 (define (remove-someone posit)
   (hash-remove! expressions posit)
@@ -279,48 +281,66 @@
   (for-each remove-family childs))
 
 (define (inherit-posit parent curr-posit)
-  (define grandparent (hash-ref parents parent))
-  (define childs      (hash-ref children parent))
-  (hash-update! children grandparent 
-                (λ (lst)
-                  (list-set lst (index-of lst parent) curr-posit)))
-  (hash-set! parents curr-posit grandparent)
-  (remove-family parent))
+  (cond
+    [(= parent root)
+     (remove-someone parent)
+     (set! root curr-posit)]
+    [else
+     (define grandparent (hash-ref parents parent))
+     (hash-update! children grandparent 
+                   (λ (lst)
+                     (list-set lst (index-of lst parent) curr-posit)))
+     (hash-set! parents curr-posit grandparent)
+     (remove-someone parent)
+     (define grandparent-color (hash-ref bgs-color grandparent))
+     (get-bg-color curr-posit grandparent-color)]))
 
-(define (updates-var expr var)
-  (define curr-posit  (get-affiliation expr))
-  (define grandparent (hash-ref parents var))
-  (inherit-posit var curr-posit)
-  (values curr-posit grandparent))
+(define (remove-elders curr-posit)
+  (define child (hash-ref children curr-posit))
+  (define args  (hash-ref arguments curr-posit))
+  (when (and (= 1 (length child))
+             (= 0 (length args)))
+    (inherit-posit curr-posit (car child)))
+  (for-each remove-elders child))
+
+;---
 
 (define (reduce lamb body parent siblings args)
-  (define vars        (car args))
-  (define body-expr   (rw.α (hash-ref expressions body)))
+  (define vars      (car args))
+  (define body-expr (rw.α (hash-ref expressions body)))
   (hash-update! arguments lamb cdr)
   (hash-update! children parent (remove body _))
   (remove-family body)
   (for ([var (in-list vars)])
-    (define-values (curr-posit parent-posit)
-      (updates-var body-expr var))
-    (define parent-color (hash-ref bgs-color parent-posit))
-    (get-bg-color curr-posit parent-color)))
+    (define curr-posit (get-affiliation body-expr))
+    (inherit-posit var curr-posit)))
         
 (define (try-to-reduce dc lamb body)
   (cond
-    [(and (> lamb 0) (> body 0))
+    [(or (= lamb root) (= body root))
+     (display-answer dc body 6)]
+    [else
      (define parent   (hash-ref parents lamb))
      (define siblings (hash-ref children parent))
      (define args     (hash-ref arguments lamb))
      (cond
        [(and parent
+             args
              (> (length siblings) 1)
              (> (length args) 0)
              (= (car siblings) lamb)
              (= (cadr siblings) body))
         (display-answer dc body 5)
         (reduce lamb body parent siblings args)]
-       [(display-answer dc body 6)])]
-    [(display-answer dc body 6)]))
+       [else
+        (display-answer dc body 6)])]))
+
+;---
+
+(define (display-answer dc bg-posit color)
+  (draw-bg dc bg-posit color)
+  (sleep 1/3)
+  (draw-bgs dc bg-posit))
 
 ;---
 
@@ -355,9 +375,11 @@
        (draw-bgs dc))
      
      (define/public (draw)
-       (get-affiliations)
-       (get-bgs-color)
-       (redraw))
+       (when (get-expr)
+         (set! root 0)
+         (get-affiliations)
+         (get-bgs-color)
+         (redraw)))
       
      (super-new
       [parent         frame]
@@ -366,7 +388,6 @@
       [paint-callback
        (λ (_ dc)
          (send dc set-origin 10 10)
-         (get-expr)
          (draw))]))))
 
 ;---
