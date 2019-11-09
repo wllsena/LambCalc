@@ -8,7 +8,7 @@
 ;---
 
 (define (read-syntax path port)
-  #`(module main "lambcalc.rkt"
+  #`(module mod "main.rkt"
       #,@(let* ([lines (port->lines port)]
                 [exprs (map (string->expr _) lines)])
            (remove* '(()) exprs))))

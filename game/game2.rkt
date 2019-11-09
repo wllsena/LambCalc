@@ -1,12 +1,15 @@
 #lang racket/gui
 
-(require fancy-app racket/draw
-         (only-in "main.rkt" string->expr α rw-expr rev-rw lst-defs))
+(require fancy-app racket/draw rsound
+         (only-in "../main.rkt" string->expr α get-?arg
+                  rw-expr rev-rw lst-defs))
 
 ;---
 
-(define cv-width  1000)
-(define cv-heigth 1000)
+(define error-sound (rs-read "sounds/error_sound.wav"))
+
+(define cv-width  800)
+(define cv-heigth 600)
 (define colors
   (list
    (make-object color% 225 169 84)
@@ -39,7 +42,6 @@
 
 ;---
 
-(define expressions   (make-hash))
 (define children      (make-hash))
 (define parents       (make-hash))
 (define arguments     (make-hash))
@@ -51,7 +53,6 @@
 (define (get-affiliation expr)
   (define curr-posit posit-counter)
   (set! posit-counter (add1 curr-posit))
-  (hash-set! expressions curr-posit expr)
   
   (define-values (body args)
     (match expr
@@ -75,14 +76,12 @@
   curr-posit)
 
 (define (get-affiliations)
-  (hash-clear! expressions)
   (hash-clear! children)
   (hash-clear! parents)
   (hash-clear! arguments)
   (hash-clear! vars)
   (set! posit-counter root)
-  (get-affiliation expression)
-  (hash-clear! vars))
+  (get-affiliation expression))
   
 
 ;---
@@ -269,7 +268,6 @@
 ;---
 
 (define (remove-someone posit)
-  (hash-remove! expressions posit)
   (hash-remove! children    posit)
   (hash-remove! parents     posit)
   (hash-remove! arguments   posit)
@@ -305,9 +303,32 @@
 
 ;---
 
+(define var-?args (make-hash))
+
+(define (to-expr posit)
+  (define child (hash-ref children posit))
+  (define args  (hash-ref arguments posit))
+  (cond
+    [(hash-has-key? var-?args posit)
+     (hash-ref var-?args posit)]
+    [(null? args)
+     (map (to-expr _) child)]
+    [args
+     (define ?args
+       (for*/list ([arg (in-list args)]
+                   [var (in-list arg)])
+         (define ?arg (get-?arg #f))
+         (hash-set! var-?args var ?arg)
+         ?arg))
+     `(λ (,@?args) ,@(map (to-expr _) child))]))
+     
+
+;---
+
 (define (reduce lamb body parent siblings args)
+  (hash-clear! var-?args)
   (define vars      (car args))
-  (define body-expr (rw.α (hash-ref expressions body)))
+  (define body-expr (to-expr body))
   (hash-update! arguments lamb cdr)
   (hash-update! children parent (remove body _))
   (remove-family body)
@@ -324,8 +345,7 @@
      (define siblings (hash-ref children parent))
      (define args     (hash-ref arguments lamb))
      (cond
-       [(and parent
-             args
+       [(and args
              (> (length siblings) 1)
              (> (length args) 0)
              (= (car siblings) lamb)
@@ -338,6 +358,8 @@
 ;---
 
 (define (display-answer dc bg-posit color)
+  (when (= color 6)
+    (play error-sound))
   (draw-bg dc bg-posit color)
   (sleep 1/3)
   (draw-bgs dc bg-posit))
@@ -364,7 +386,9 @@
          [(send event button-down?)
           (define bg-posit
             (match-background (send event get-x) (send event get-y)))
-          (set! bg-selected bg-posit)]))
+          (if (hash-ref arguments bg-posit)
+              (set! bg-selected bg-posit)
+              (display-answer dc bg-posit 6))]))
 
      (define/public (redraw)
        (get-sizes)
@@ -372,6 +396,7 @@
        (define dc (get-dc))
        (send dc set-background "DarkGray")
        (send dc clear)
+       (send dc set-smoothing 'aligned)
        (draw-bgs dc))
      
      (define/public (draw)
@@ -382,13 +407,13 @@
          (redraw)))
       
      (super-new
-      [parent         frame]
-      [min-width      (+ 20 cv-width)]
-      [min-height     (+ 20 cv-heigth)]
-      [paint-callback
-       (λ (_ dc)
-         (send dc set-origin 10 10)
-         (draw))]))))
+       [parent         frame]
+       [min-width      (+ 20 cv-width)]
+       [min-height     (+ 20 cv-heigth)]
+       [paint-callback
+        (λ (_ dc)
+          (send dc set-origin 10 10)
+          (draw))]))))
 
 ;---
 
