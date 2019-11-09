@@ -7,8 +7,7 @@
 ; childs -> children
 ; lambd  -> lambda expression
 ; var    -> variable
-; arg    -> argument (number)
-; argt   -> argument (struct)
+; arg    -> argtument (number)
 ; wd     -> width
 ; hg     -> heigt
 ; norm   -> normalizer
@@ -18,8 +17,8 @@
 
 ;---
 
-(define cv-width  800) ; +30
-(define cv-heigth 600) ; +30
+(define cv-width  800)
+(define cv-heigth 600)
 
 ;---
 
@@ -37,8 +36,8 @@
    (make-object color% 36  139 64)        ;3
    (make-object color% 1   75  13)        ;4
    (make-object color% 128 128 128 1/2)   ;5 
-   (make-object color% 75  181 67  3/4)   ;6 red-error
-   (make-object color% 192 32  32  3/4))) ;7 green-sucess
+   (make-object color% 75  181 67  3/4)   ;6 green-sucess
+   (make-object color% 192 32  32  3/4))) ;7 red-error
 
 ;---
 
@@ -99,6 +98,10 @@
    (class canvas%
      (inherit get-dc)
 
+     (define nodes         null)
+     (define kinship       #f)
+     (define selected-node #f)
+
      (define/public (draw)
        (define expr (get-expr))
        (when expr
@@ -106,32 +109,133 @@
          (redraw node)))
 
      (define/public (redraw node)
-       (define node*     (get-sizes node))
-       (normalize-nodes node*)
-       (define node-spcs (obtain-specs node*))
-       (match-define     (specs _ _ root-wd root-hg _) node-spcs)
-       (define norm      (min (/ cv-width  root-wd)
-                              (/ cv-heigth root-hg)))
-       (define x         (* 1/2 (- cv-width  (* norm root-wd))))
-       (define y         (* 1/2 (- cv-heigth (* norm root-hg))))
-       (define node**    (get-specs node* x y norm))
+       (define node*   (get-sizes node))
+       (define-values  (node** x y) (normalize-nodes node*))
+       (define node*** (get-specs node** x y))
+       (set! nodes node***)
        
        (define dc (get-dc))
        (send dc set-background "DarkGray")
        (send dc clear)
        (send dc set-smoothing 'aligned)
-       (draw-bgs dc node**))
+       (draw-bgs dc node***))
 
+     (define/public (get-kinship event)
+       (define node nodes)
+       (define x (send event get-x))
+       (define y (send event get-y))
+       (and (in-this-bg? x y node)
+            (match-node x y node)))
+
+     (define/override (on-event event)
+       (when (send event button-up?)
+         (define dc           (get-dc))
+         (define curr-kinship (get-kinship event))
+         
+         (cond
+           [curr-kinship
+            (cond
+              [kinship
+               (match `(,kinship ,curr-kinship)
+                 [`((argt left ,rest ...) (rigth ,rest ...))
+                  (display-answer dc selected-node 6)
+                  (sleep/yield 1/2)
+                  
+                  (define rev-kinship (reverse rest))
+                  (define node (reduce nodes rev-kinship))
+                  (redraw node)]
+                 
+                 [_
+                  (display-answer dc selected-node 7)
+                  (sleep/yield 1/2)
+                  (draw-bgs dc selected-node)])
+
+               (set! kinship       #f)
+               (set! selected-node #f)]
+           
+              [else
+               (set! kinship curr-kinship)
+               (define rev-kinship (reverse curr-kinship))
+               (set! selected-node (get-node-by-kinship nodes rev-kinship))
+               (display-answer dc selected-node 6)])]
+           
+           [else
+            (when selected-node
+              (draw-bgs dc selected-node)
+              (set! selected-node #f))
+            (set! kinship #f)])))
+     
      (super-new
-       [parent     frame]
-       [min-width  (+ 30 cv-width)]
-       [min-height (+ 30 cv-heigth)]
-       [paint-callback
-        (λ (_ dc)
-          (send dc set-origin 15 15)
-          (draw))]))))
+      [parent     frame]
+      [min-width  cv-width]
+      [min-height cv-heigth]
+      [paint-callback
+       (λ (_ dc)
+         (draw))]))))
 
 ;---
+    
+(define (display-answer dc node color)
+  (when (= color 7)
+    (play (list-ref sounds 0)))
+  (draw-bg dc node color))
+
+;---
+
+(define (reduce node kinship)
+  (cond
+    [(null? kinship)
+     (node-replace node)]
+    [else
+     (define rst-kin (cdr kinship))
+     (match (car kinship)
+       ['child
+        (match-define (lambd argt child spcs) node)
+        (define child* (reduce child rst-kin))
+        (lambd argt child* spcs)]
+       
+       ['left
+        (match-define (bracket elder child1 child2 spcs) node)
+        (define child1* (reduce child1 rst-kin))
+        (elder child1* child2 spcs)]
+       
+       ['rigth
+        (match-define (bracket elder child1 child2 spcs) node)
+        (define child2* (reduce child2 rst-kin))
+        (elder child1 child2* spcs)])]))
+;---
+
+(define (node-replace node)
+  ;(match-define 
+  node)
+
+;---
+
+(define (get-node-by-kinship node kinship)
+  (cond
+    [(null? kinship) node]
+    [else
+     (define rst-kin (cdr kinship))
+     (match (car kinship)
+       ['var node]
+       ['argt
+        (define argt (lambd-argt node))
+        (get-node-by-kinship argt rst-kin)]
+       ['child
+        (define child (lambd-child node))
+        (get-node-by-kinship child rst-kin)]
+       ['elder
+        (define elder (bracket-elder node))
+        (get-node-by-kinship elder rst-kin)]
+       ['left
+        (define left (bracket-child1 node))
+        (get-node-by-kinship left rst-kin)]
+       ['rigth
+        (define rigth (bracket-child2 node))
+        (get-node-by-kinship rigth rst-kin)])]))
+
+;---
+
 
 (define (invalid-expression exn)
   (send message set-label "INVALIDE EXPRESSION!")
@@ -145,9 +249,9 @@
 ;---
 
 (struct specs    (x y width heigt color))
-(struct var/arg  (expr                     spcs))
-(struct lambd    (expr argt  child         spcs))
-(struct bracket  (expr elder child1 child2 spcs))
+(struct var/argt (expr                spcs))
+(struct lambd    (argt  child         spcs))
+(struct bracket  (elder child1 child2 spcs))
 
 ;---
 
@@ -158,68 +262,68 @@
 
 ;---
 
-(define (get-nodes expr [parent-color 6])
+(define (get-nodes expr [parent-color 6]) ; MUDAR
   (define color (one-color-available parent-color))
   (define spcs  (specs 0 0 0 0 color))
   (match expr
     [(? symbol?)
-     (var/arg expr spcs)]
+     (var/argt expr spcs)]
 
     [`(λ ,arg ,body)
-     (define argt  (var/arg arg (specs 0 0 0 0 5)))
+     (define argt  (var/argt arg (specs 0 0 0 0 5)))
      (define child (get-nodes body color))
-     (lambd expr argt child spcs)]
+     (lambd argt child spcs)]
 
     [`(,expr1 ,expr2)
-     (define elder  (var/arg #f (specs 0 0 0 0 5)))
+     (define elder  (var/argt #f (specs 0 0 0 0 5)))
      (define child1 (get-nodes expr1 color))
      (define child2 (get-nodes expr2 color))
-     (bracket expr elder child1 child2 spcs)]))
+     (bracket elder child1 child2 spcs)]))
 
 ;---
 
 (define obtain-specs
   (match-lambda
-    [(or (var/arg       _ spcs)
-         (lambd     _ _ _ spcs)
-         (bracket _ _ _ _ spcs))
+    [(or (var/argt     _ spcs)
+         (lambd     _ _ spcs)
+         (bracket _ _ _ spcs))
      spcs]))
 
 ;---
 
-(define (get-size-var/arg node [arg? #f])
-  (match-define (var/arg expr (specs _ _ _ _ color)) node)
-  (var/arg expr (specs 0 0 (if arg? 100 200) 100 color)))
+(define (get-size-var/argt node)
+  (match-define (var/argt expr (specs _ _ _ _ color)) node)
+  (var/argt expr (specs 0 0 100 100 color)))
 
 (define (get-size-lambd node)
-  (match-define (lambd expr argt child (specs _ _ _ _ color)) node)
-  (define argt*      (get-size-var/arg argt))
+  (match-define (lambd argt child (specs _ _ _ _ color)) node)
   (define child*     (get-sizes child))
   (define child-spcs (obtain-specs child*))
-  (match-define      (specs _ _ wd hg _) child-spcs)
-  (define wd*        (* 22/20 (max 200 wd)))
-  (define hg*        (* 23/20 (+ 100 hg)))
-  (define spcs       (specs 0 0 wd* hg* color))
-  (lambd expr argt* child* spcs))
+  (match-define      (specs _ _ c-wd c-hg _) child-spcs)
+  (define wd*        (* 22/20 (max 200 c-wd)))
+  (define hg*        (* 23/20 (+ 100 c-hg)))
+  (match-define      (var/argt a-expr (specs _ _ _ _ a-color)) argt)
+  (define argt*      (var/argt a-expr (specs 0 0 200 100 a-color)))
+  (lambd argt* child* (specs 0 0 wd* hg* color)))
 
 (define (get-size-bracket node)
-  (match-define (bracket expr elder child1 child2 (specs _ _ _ _ color)) node)
-  (define elder*      (get-size-var/arg elder))
+  (match-define (bracket elder child1 child2 (specs _ _ _ _ color)) node)
   (define child1*     (get-sizes child1))
   (define child2*     (get-sizes child2))
   (define child1-spcs (obtain-specs child1*))
   (define child2-spcs (obtain-specs child2*))
-  (match-define       (specs _ _ wd1 hg1 _) child1-spcs)
-  (match-define       (specs _ _ wd2 hg2 _) child2-spcs)  
-  (define wd*         (* 23/20 (+ wd1 wd2)))
-  (define hg*         (* 23/20 (+ 100 (max hg1 hg2))))
-  (define spcs        (specs 0 0 wd* hg* color))
-  (bracket expr elder* child1* child2* spcs))
+  (match-define       (specs _ _ c1-wd c1-hg _) child1-spcs)
+  (match-define       (specs _ _ c2-wd c2-hg _) child2-spcs)  
+  (define wd*         (* 23/20 (+ c1-wd c2-wd)))
+  (define hg*         (* 23/20 (+ 100 (max c1-hg c2-hg))))
+  (match-define       (var/argt e-expr (specs _ _ _ _ e-color)) elder)
+  (define elder*      (var/argt e-expr (specs 0 0 200 100 e-color)))
+  (bracket elder* child1* child2* (specs 0 0 wd* hg* color)))
      
 (define get-sizes
   (match-lambda
-    [(? var/arg? node)
-     (get-size-var/arg node #t)]
+    [(? var/argt? node)
+     (get-size-var/argt node)]
     [(? lambd? node)
      (get-size-lambd node)]
     [(? bracket? node)
@@ -237,20 +341,20 @@
 
 (define (norm-node node norm)
   (match node
-    [(var/arg expr spcs)
+    [(var/argt expr spcs)
      (define spcs* (norm-specs spcs norm))
-     (var/arg expr spcs*)]
-    [(lambd expr argt child spcs)
+     (var/argt expr spcs*)]
+    [(lambd argt child spcs)
      (define argt*  (norm-node argt norm))
      (define child* (norm-node child norm))
      (define spcs*  (norm-specs spcs norm))
-     (lambd expr argt* child* spcs*)]
-    [(bracket expr elder child1 child2 spcs)
+     (lambd argt* child* spcs*)]
+    [(bracket elder child1 child2 spcs)
      (define elder*  (norm-node elder norm))
      (define child1* (norm-node child1 norm))
      (define child2* (norm-node child2 norm))
      (define spcs*   (norm-specs spcs norm))
-     (bracket expr elder* child1* child2* spcs*)]))
+     (bracket elder* child1* child2* spcs*)]))
 
 (define (normalize-nodes node)
   (define node-spcs (obtain-specs node))
@@ -259,87 +363,128 @@
   (define x         (* 1/2 (- cv-width  (* norm width))))
   (define y         (* 1/2 (- cv-heigth (* norm heigth))))
   (define node*     (norm-node node norm))
-  (values x y node*))
+  (values node* x y))
 
+;---
+
+(define (get-specs-var/argt node x y)
+  (match-define (var/argt expr (specs _ _ wd hg color)) node)
+  (var/argt expr (specs x y wd hg color)))
+
+(define (get-specs-lambd node x y)
+  (match-define (lambd argt child (specs _ _ wd hg color)) node)
   
-#|
-(define (get-specs-var/arg node x y norm) (void))
+  (define argt-spcs  (obtain-specs argt))
+  (match-define      (specs _ _ a-wd a-hg _) argt-spcs)
+  (define a-x        (+ x (* 1/2 (- wd a-wd))))
+  (define a-y        (+ y (* 1/20 hg)))
+  (define argt*      (get-specs-var/argt argt a-x a-y))
+  
+  (define child-spcs (obtain-specs child))
+  (match-define      (specs _ _ c-wd c-hg _) child-spcs)
+  (define c-x        (+ x (* 1/2 (- wd c-wd))))
+  (define c-y        (+ y (* 2/20 hg) a-hg))
+  (define child*     (get-specs child c-x c-y))
+  
+  (lambd argt* child* (specs x y wd hg color)))
 
-(define get-specs
-  (match-lambda
-    [(? var/arg? node)
-     (get-specs-var/arg node)]
-    [(? lambd? node)
-     (get-specs-lambd node)]
-    [(? bracket? node)
-     (get-specs-bracket node)]))
-|#
-;---
+(define (get-specs-bracket node x y)
+  (match-define (bracket elder child1 child2 (specs _ _ wd hg color)) node)
+  
+  (define elder-spcs (obtain-specs elder))
+  (match-define      (specs _ _ e-wd e-hg _) elder-spcs)
+  (define e-x        (+ x (* 1/2 (- wd e-wd))))
+  (define e-y        (+ y (* 1/20 hg)))
+  (define elder*     (get-specs-var/argt elder e-x e-y))
 
-(define (get-specs node x y norm)
+  (define spaces-y    (+ e-hg (* 2/20 hg)))
+  
+  (define child1-spcs (obtain-specs child1))
+  (match-define       (specs _ _ c1-wd c1-hg _) child1-spcs)
+  (define c1-x        (+ x (* 1/20 wd)))
+  (define c1-y        (+ y spaces-y (* 1/2 (- hg c1-hg spaces-y))))
+  (define child1*     (get-specs child1 c1-x c1-y))
+
+  (define child2-spcs (obtain-specs child2))
+  (match-define       (specs _ _ c2-wd c2-hg _) child2-spcs)
+  (define c2-x        (+ c1-x c1-wd (* 1/20 wd)))
+  (define c2-y        (+ y spaces-y (* 1/2 (- hg c2-hg spaces-y))))
+  (define child2*     (get-specs child2 c2-x c2-y))
+
+  (bracket elder* child1* child2* (specs x y wd hg color)))
+  
+(define (get-specs node x y)
   (match node
-    [(var/arg expr (specs _ _ wd hg color))
-     (var/arg expr (specs x y (* norm wd) (* norm hg) color))]
-
-    [(lambd expr argt child (specs _ _ wd hg color))
-     (match-define (specs _ _ _ (app (* norm _) c-hg) _)
-       (obtain-specs child))
-     (let* ([n-wd   (* norm wd)]
-            [n-hg   (* norm hg)]
-            [n-x    (+ x (if (< c-hg (* 200 norm))
-                             (/ (- n-hg c-hg) 2)
-                             (* 1/22 n-wd)))]
-            [n-y    (+ y (* 100 norm) (* 2/23 n-hg))]
-            [child* (get-specs child n-x n-y norm)])
-       (match-define (var/arg arg (specs _ _ a-wd a-hg arg-color)) argt)
-       (define n-a-wd (+ x (/ (- n-wd (* norm a-wd)) 2)))
-       (define n-a-hg (+ y (* 1/23 n-hg)))
-       (define argt*  (var/arg arg (specs n-a-wd n-a-hg
-                                          (* norm a-wd) (* norm a-hg)
-                                          arg-color)))
-       (lambd expr argt* child* (specs x y n-wd n-hg color)))]
-
-    [(bracket expr elder child1 child2 (specs _ _ wd hg color))
-     (define n-wd (* norm wd))
-     (define n-hg (* norm hg))
-     (define n-y  (+ y (* 100 norm) (* 2/23 n-hg)))
-     (define n-x (+ x (* 1/23 n-wd)))
-     (match-define (specs _ _ _ (app (* norm _) hg1) _)
-       (obtain-specs child1))
-     (match-define (specs _ _ _ (app (* norm _) hg2) _)
-       (obtain-specs child2))
-     (define y1 (+ n-y (if (< hg1 hg2) (/ (- hg2 hg1) 2) 0)))
-     (define y2 (+ n-y (if (< hg2 hg1) (/ (- hg1 hg2) 2) 0)))
-     (define child1* (get-specs child1 n-x y1 norm))
-          
-     (match-define (specs _ _ wd* _ _) (obtain-specs child1*))
-     (define n-x* (+ x wd* (* 2/23 n-wd)))
-     (define child2* (get-specs child2 n-x* y2 norm))
-     (bracket expr elder child1* child2* (specs x y n-wd n-hg color))]))
+    [(? var/argt?)
+     (get-specs-var/argt node x y)]
+    [(? lambd?)
+     (get-specs-lambd node x y)]
+    [(? bracket?)
+     (get-specs-bracket node x y)]))
 
 ;---
 
-(define (draw-bg dc node)
+(define (draw-bg dc node [color #f])
   (define spcs  (obtain-specs node))
-  (match-define (specs x y width heigth color) spcs)
+  (match-define (specs x y width heigth color*) spcs)
+  (define color** (cond [color] [color*]))
+  
   (send dc set-pen "DarkGray" 1 'hilite)
-  (send dc set-brush (list-ref colors color) 'solid)
+  (send dc set-brush (list-ref colors color**) 'solid)
   (define rect-path (draw-rounded-rectangle dc x y width heigth))
   (send dc draw-path rect-path))
   
 (define (draw-bgs dc node)
   (draw-bg dc node)
-  
   (match node
-    [(var/arg _ _)
+    [(var/argt _ _)
      (void)]
-    [(lambd _ argt child _)
+    [(lambd argt child _)
      (draw-bg dc argt)
      (draw-bgs dc child)]
-    [(bracket _ elder child1 child2 _)
+    [(bracket elder child1 child2 _)
      (draw-bg dc elder)
      (draw-bgs dc child1)
      (draw-bgs dc child2)]))
+
+;---
+
+(define (in-this-bg? x y node)
+  (define spcs (obtain-specs node))
+  (match-define (specs nd-x nd-y wd hg _) spcs)
+  (and (< nd-x x (+ nd-x wd))
+       (< nd-y y (+ nd-y hg))))
+
+(define (match-node x y node [kinship null])
+  (match node
+    [(? var/argt?)
+     (cons 'var kinship)]
+    
+    [(lambd argt child _)
+     (cond
+       [(in-this-bg? x y argt)
+        (cons 'argt kinship)]
+       [(in-this-bg? x y child)
+        (define kinship* (cons 'child kinship))
+        (match-node x y child kinship*)]
+       [else
+        kinship])]
+    
+    [(bracket elder child1 child2 _)
+     (cond
+       [(in-this-bg? x y elder)
+        (cons 'elder kinship)]
+       [(in-this-bg? x y child1)
+        (define kinship* (cons 'left kinship))
+        (match-node x y child1 kinship*)]
+       [(in-this-bg? x y child2)
+        (define kinship* (cons 'rigth kinship))
+        (match-node x y child2 kinship*)]
+       [else
+        kinship])]))
+
+;---
+
 
 ;---
 ;----- PLAY
