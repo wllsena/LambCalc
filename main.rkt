@@ -37,7 +37,7 @@
   (define to* (α to #f))
   (define lex-rplc
     (match-lambda 
-      [(? (equal? _ from))
+      [(? (equal? from _))
        to*]
       [(? symbol? expr)
        expr]
@@ -72,7 +72,7 @@
 
 ;---
 
-(define (get-?arg ?bn)
+(define (get-?arg [?bn #f])
   (match ?bn
     [(box (app add1 ?n))
      (set-box! ?bn ?n)
