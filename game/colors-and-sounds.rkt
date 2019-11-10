@@ -40,7 +40,9 @@
   
 (define sounds
   (list
-   (rs-read "sounds/error_sound.wav"))) ;0 error-sound
+   (rs-read "sounds/error_sound.wav")   ;0 error-sound
+   (rs-read "sounds/dinosar_sound.wav") ;1 dinosar_sound)
+   (rs-read "sounds/final_sound.wav")))  ;2 final_sound) 
 
 ;---
 

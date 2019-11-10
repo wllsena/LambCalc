@@ -28,26 +28,63 @@
   (new frame%
        [label "Game"]))
 
+(define congr-frame
+  (new frame%
+       [label "Congratulations!"]))
+
+(define congr-message
+  (new message% [parent congr-frame]
+       [label "Congratulations!"]
+       [font  (make-object font% 30 'modern)]))
+
+(define ops-frame
+  (new frame%
+       [label "Ops!"]))
+
+(define ops-message
+  (new message% [parent ops-frame]
+       [label "Not Yet!"]
+       [font  (make-object font% 30 'modern)]))
+
+(define panel1
+  (new horizontal-panel% [parent frame]))
+
 (define message
-  (new message% [parent frame]
+  (new message% [parent panel1]
        [label "Hello!"]
        [stretchable-width #t]))
 
-(define panel
+(define button-send
+  (new button% [parent panel1]
+       [label "Send Answer!"]
+       [callback
+        (λ _
+          (cond
+            [(send canvas check-answer)
+             (play-sound 2)
+             (send congr-frame show #t)]
+            [else
+             (send ops-frame show #t)]))]))
+
+(define panel2
   (new horizontal-panel% [parent frame]))
  
 (define text-field
-  (new text-field% [parent panel]
-       [label "Lambda expression: "]
+  (new text-field% [parent panel2]
+       [label "Lambda Expression: "]
        [init-value "(λ x . x x) (λ x . x)"]))
 
 (define button-run
-  (new button% [parent panel]
+  (new button% [parent panel2]
        [label "Run!"]
        [callback
         (λ _
-          (send message set-label "Hello")
           (send canvas draw))]))
+
+(define (send-expr expr)
+  (define text  (format "Expression: ~a" expr))
+  (define text* (substring text 0 (min (* 1/5 cv-width) (string-length text))))
+  (send message set-label text*))
 
 ;---
 ;----- CANVAS
@@ -61,9 +98,12 @@
      (define nodes         null)
      (define kinship       #f)
      (define selected-node #f)
+     (define expr          null)
+     (define answer        null)
 
      (define/public (draw)
        (define expr (get-expr))
+       (set! answer (eval-expr expr))
        (when expr
          (reset-colors)
          (define node  (get-nodes expr))
@@ -80,8 +120,10 @@
        (send dc clear)
        (send dc set-smoothing 'aligned)
        (draw-bgs dc node***)
-       
-       (set! nodes node***))
+
+       (set! expr (to-expr node))
+       (set! nodes node***)
+       (send-expr expr))
 
      (define/public (get-kinship event)
        (define node nodes)
@@ -89,6 +131,9 @@
        (define y (- (send event get-y) 15))
        (and (in-this-bg? x y node)
             (match-node x y node)))
+     
+     (define/public (check-answer)
+       (equal? expr answer))
 
      (define/override (on-event event)
        (when (send event button-down?)
@@ -122,7 +167,7 @@
               [else
                (set! kinship       curr-kinship)
                (set! selected-node curr-node)
-               (display-answer dc curr-node 'sucess)])]
+               (display-answer dc curr-node 'hit)])]
            
            [else
             (when kinship
@@ -139,6 +184,35 @@
         (λ (_ dc)
           (send dc set-origin 15 15)
           (draw))]))))
+
+;---
+;----- GET ANSWER
+;---
+
+(define (get-eval-thread mode-eval expr result-thread)
+  (thread
+   (λ _
+     (define expr* (mode-eval expr))
+     (thread-send result-thread expr*))))
+
+(define (eval-expr expr)
+  (define curr-thread (current-thread))
+  (define lazy-thread (get-eval-thread lazy-eval expr curr-thread))
+  (sleep 1/3)
+  (cond
+    [(thread-running? lazy-thread)
+     (kill-thread lazy-thread)
+     (α expr #f)]
+    [else
+     (define expr* (thread-receive))
+     (define strict-thread (get-eval-thread strict-eval expr* curr-thread))
+     (sleep 1/3)
+     (cond 
+       [(thread-running? strict-thread)
+        (kill-thread strict-thread)
+        expr*]
+       [else
+        (thread-receive)])]))
 
 ;---
 ;----- REPRESENTATION OF THE EXPRESSION AS NODES
@@ -163,7 +237,7 @@
 (define (get-expr)
   (define text (send text-field get-value))
   (with-handlers ([exn:fail? invalid-expression])
-    (α (rw-expr (string->expr text)))))
+    (α (rw-expr (string->expr text)) #f)))
 
 (define (invalid-expression exn)
   (send message set-label "INVALIDE EXPRESSION!")
@@ -228,14 +302,14 @@
   (var/argt expr (specs 0 0 100 100 color)))
 
 (define (get-size-lambd node)
-  (match-define      (lambd argt child (specs _ _ _ _ color)) node)
-  (define child*     (get-sizes child))
-  (define child-spcs (obtain-specs child*))
-  (match-define      (specs _ _ c-wd c-hg _) child-spcs)
-  (define wd*        (* 22/20 (max 200 c-wd)))
-  (define hg*        (* 23/20 (+ 100 c-hg)))
-  (match-define      (var/argt a-expr (specs _ _ _ _ a-color)) argt)
-  (define argt*      (var/argt a-expr (specs 0 0 200 100 a-color)))
+  (match-define       (lambd argt child (specs _ _ _ _ color)) node)
+  (define child*      (get-sizes child))
+  (define child-spcs  (obtain-specs child*))
+  (match-define       (specs _ _ c-wd c-hg _) child-spcs)
+  (define wd*         (* 22/20 (max 200 c-wd)))
+  (define hg*         (* 23/20 (+ 125 c-hg)))
+  (match-define       (var/argt a-expr (specs _ _ _ _ a-color)) argt)
+  (define argt*       (var/argt a-expr (specs 0 0 200 100 a-color)))
   (lambd argt* child* (specs 0 0 wd* hg* color)))
 
 (define (get-size-bracket node)
@@ -412,7 +486,10 @@
 (define (display-answer dc node color)
   (define color*
     (match color
+      ['hit
+       6]
       ['sucess
+       (play-sound 1)
        6]
       ['error
        (play-sound 0)
@@ -463,6 +540,27 @@
   (send path scale width heigth)
   (send path translate x y)
   path)
+
+;---
+
+(define (to-expr node)
+  (define to-expr*
+    (match-lambda
+      [(var/argt expr _)
+       expr]
+
+      [(lambd (var/argt arg _) child spcs)
+       (define body (to-expr* child))
+       `(λ ,arg ,body)]
+
+      [(bracket _ child1 child2 _)
+       (define expr1 (to-expr* child1))
+       (define expr2 (to-expr* child2))
+       `(,expr1 ,expr2)]))
+  
+  (define expr  (to-expr* node))
+  (define expr* (α expr))
+  expr*)
 
 ;---
 ;----- REDUCTION
