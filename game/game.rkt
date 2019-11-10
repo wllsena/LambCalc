@@ -28,16 +28,16 @@
 
 ;---
 
-(define colors
+(define bg-colors
   (list
-   (make-object color% 225 169 84)        ;0
-   (make-object color% 178 139 100)       ;1
-   (make-object color% 98  116 93)        ;2
-   (make-object color% 36  139 64)        ;3
-   (make-object color% 1   75  13)        ;4
-   (make-object color% 128 128 128 1/2)   ;5 
-   (make-object color% 75  181 67  3/4)   ;6 green-sucess
-   (make-object color% 192 32  32  3/4))) ;7 red-error
+   (make-color 225 169 84)        ;0
+   (make-color 178 139 100)       ;1
+   (make-color 98  116 93)        ;2
+   (make-color 36  139 64)        ;3
+   (make-color 1   75  13)        ;4
+   (make-color 128 128 128 1/2)   ;5 
+   (make-color 75  181 67  3/4)   ;6 green-sucess
+   (make-color 192 32  32  3/4))) ;7 red-error
 
 ;---
 
@@ -128,7 +128,7 @@
             (match-node x y node)))
 
      (define/override (on-event event)
-       (when (send event button-up?)
+       (when (send event button-down?)
          (define dc           (get-dc))
          (define curr-kinship (get-kinship event))
          
@@ -166,12 +166,12 @@
             (set! kinship #f)])))
      
      (super-new
-      [parent     frame]
-      [min-width  cv-width]
-      [min-height cv-heigth]
-      [paint-callback
-       (λ (_ dc)
-         (draw))]))))
+       [parent     frame]
+       [min-width  cv-width]
+       [min-height cv-heigth]
+       [paint-callback
+        (λ (_ dc)
+          (draw))]))))
 
 ;---
     
@@ -430,7 +430,7 @@
   (define color** (cond [color] [color*]))
   
   (send dc set-pen "DarkGray" 1 'hilite)
-  (send dc set-brush (list-ref colors color**) 'solid)
+  (send dc set-brush (list-ref bg-colors color**) 'solid)
   (define rect-path (draw-rounded-rectangle dc x y width heigth))
   (send dc draw-path rect-path))
   
