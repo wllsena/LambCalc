@@ -1,6 +1,6 @@
 #lang racket/gui
 
-(require "colors-and-sounds.rkt" "../main.rkt" racket/draw)
+(require "colors-and-sounds.rkt" "bitmaps.rkt" "../main.rkt" racket/draw)
 
 ;;; Abbreviations
 ; childs     -> children
@@ -18,7 +18,7 @@
 ;---
 
 (define cv-width  800)
-(define cv-heigth 600)
+(define cv-height 600)
 
 ;---
 ;----- GUI
@@ -179,13 +179,13 @@
               (set! selected-node #f))])))
      
      (super-new
-       [parent     frame]
-       [min-width  (+ 30 cv-width)]
-       [min-height (+ 30 cv-heigth)]
-       [paint-callback
-        (λ (_ dc)
-          (send dc set-origin 15 15)
-          (draw))]))))
+      [parent     frame]
+      [min-width  (+ 30 cv-width)]
+      [min-height (+ 30 cv-height)]
+      [paint-callback
+       (λ (_ dc)
+         (send dc set-origin 15 15)
+         (draw))]))))
 
 ;---
 ;----- GET ANSWER
@@ -301,7 +301,7 @@
 
 (define (get-size-var/argt node)
   (match-define (var/argt expr (specs _ _ _ _ color)) node)
-  (var/argt expr (specs 0 0 100 100 color)))
+  (var/argt expr (specs 0 0 90 100 color)))
 
 (define (get-size-lambd node)
   (match-define       (lambd argt child (specs _ _ _ _ color)) node)
@@ -325,17 +325,17 @@
   (define wd*         (* 23/20 (+ c1-wd c2-wd)))
   (define hg*         (* 23/20 (+ 100 (max c1-hg c2-hg))))
   (match-define       (var/argt e-expr (specs _ _ _ _ e-color)) elder)
-  (define elder*      (var/argt e-expr (specs 0 0 200 100 e-color)))
+  (define elder*      (var/argt e-expr (specs 0 0 180 100 e-color)))
   (bracket elder* child1* child2* (specs 0 0 wd* hg* color)))
 
 ;---
 
 (define (normalize-nodes node)
   (define node-spcs (obtain-specs node))
-  (match-define     (specs _ _ width heigth _) node-spcs)
-  (define norm      (min (/ cv-width  width) (/ cv-heigth heigth)))
+  (match-define     (specs _ _ width height _) node-spcs)
+  (define norm      (min (/ cv-width  width) (/ cv-height height)))
   (define x         (* 1/2 (- cv-width  (* norm width))))
-  (define y         (* 1/2 (- cv-heigth (* norm heigth))))
+  (define y         (* 1/2 (- cv-height (* norm height))))
   (define node*     (norm-node node norm))
   (values node* x y))
 
@@ -502,31 +502,44 @@
 ;---
 
 (define (draw-bgs dc node)
-  (draw-bg dc node)
   (match node
     [(var/argt _ _)
-     (void)]
+     (draw-bg dc node #:figure 'egg)]
     [(lambd argt child _)
-     (draw-bg dc argt)
+     (draw-bg dc node)
+     (draw-bg dc argt #:figure 'trex)
      (draw-bgs dc child)]
     [(bracket elder child1 child2 _)
-     (draw-bg dc elder)
+     (draw-bg dc node)
+     (draw-bg dc elder #:figure 'triceratops)
      (draw-bgs dc child1)
      (draw-bgs dc child2)]))
 
-(define (draw-bg dc node [color1 #f])
+(define (draw-bg dc node [color1 #f] #:figure [figure #f])
   (define spcs    (obtain-specs node))
-  (match-define   (specs x y width heigth color2) spcs)
+  (match-define   (specs x y width height color2) spcs)
   (define color*  (cond [color1] [color2]))
   (define color** (get-color color*))
   (send dc set-pen "DarkGray" 1 'hilite)
   (send dc set-brush color** 'solid)
-  (define rect-path (draw-rounded-rectangle dc x y width heigth))
-  (send dc draw-path rect-path))
+  (draw-rounded-rectangle dc x y width height)
+  (when figure
+    (define bitmap (bitmap-figure figure))
+    (define scale  (* width (match figure
+                              ['trex 1/310]
+                              ['triceratops 1/1200]
+                              ['egg 1/1500])))
+    (define wd*    (/ width  scale))
+    (define hg*    (/ height scale))
+    (define x*     (+ (/ x scale) (* 1/2 (- wd* (send bitmap get-width)))))
+    (define y*     (+ (/ y scale) (* 1/2 (- hg* (send bitmap get-height)))))
+    (send dc set-scale scale scale)
+    (send dc draw-bitmap bitmap x* y*)
+    (send dc set-scale 1 1)))
 
 ;---
 
-(define (draw-rounded-rectangle dc x y width heigth)
+(define (draw-rounded-rectangle dc x y width height)
   (define path (new dc-path%))
   (define (curve-to x1 y1 x2 y2 x3 y3)
     (send path curve-to x1 y1 x2 y2 x3 y3))
@@ -539,9 +552,9 @@
   (curve-to 0.8   1.02  0.2   1.02  0.1   1)
   (curve-to 0.05  1     0     0.95  0     0.9)
   (curve-to -0.02 0.8   -0.02 0.2   0     0.1)
-  (send path scale width heigth)
+  (send path scale width height)
   (send path translate x y)
-  path)
+  (send dc draw-path path))
 
 ;---
 
