@@ -1,6 +1,6 @@
 #lang racket/gui
 
-(require "colors-and-sounds.rkt" "../main.rkt" fancy-app racket/draw)
+(require "colors-and-sounds.rkt" "../main.rkt" racket/draw)
 
 ;;; Abbreviations
 ; childs     -> children
@@ -29,8 +29,11 @@
        [label "Game"]))
 
 (define congr-frame
-  (new frame%
-       [label "Congratulations!"]))
+  (new
+   (class frame%
+     (define/augment (on-close)
+       (stop))
+     (super-new [label "Congratulations!"]))))
 
 (define congr-message
   (new message% [parent congr-frame]
@@ -99,11 +102,9 @@
      (define kinship       #f)
      (define selected-node #f)
      (define expr          null)
-     (define answer        null)
 
      (define/public (draw)
        (define expr (get-expr))
-       (set! answer (eval-expr expr))
        (when expr
          (reset-colors)
          (define node  (get-nodes expr))
@@ -133,7 +134,8 @@
             (match-node x y node)))
      
      (define/public (check-answer)
-       (equal? expr answer))
+       (define expr* (α (eval-expr expr)))
+       (equal? expr expr*))
 
      (define/override (on-event event)
        (when (send event button-down?)
@@ -202,7 +204,7 @@
   (cond
     [(thread-running? lazy-thread)
      (kill-thread lazy-thread)
-     (α expr #f)]
+     expr]
     [else
      (define expr* (thread-receive))
      (define strict-thread (get-eval-thread strict-eval expr* curr-thread))
@@ -558,9 +560,8 @@
        (define expr2 (to-expr* child2))
        `(,expr1 ,expr2)]))
   
-  (define expr  (to-expr* node))
-  (define expr* (α expr))
-  expr*)
+  (define expr (α (to-expr* node)))
+  expr)
 
 ;---
 ;----- REDUCTION
@@ -595,11 +596,11 @@
   (define to**  (get-var-colors to*))
   (define lex-rplc
     (match-lambda
-      [(var/argt (? (equal? from _)) _)
+      [(var/argt (? (λ (val) (equal? from val))) _)
        to**]
 
-      [(? var/argt? node)
-       node]
+      [(? var/argt? var)
+       var]
 
       [(lambd argt child spcs)
        (define child* (lex-rplc child))

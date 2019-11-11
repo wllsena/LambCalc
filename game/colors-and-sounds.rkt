@@ -1,6 +1,6 @@
 #lang racket
 
-(provide get-color play-sound reset-colors one-color-available)
+(provide stop get-color play-sound reset-colors one-color-available)
 
 (require racket/draw rsound)
 
@@ -8,20 +8,20 @@
 
 (define var-colors
   (list
-   (make-color 87  87  87)
-   (make-color 173 35  35)
-   (make-color 42  75  215)
-   (make-color 29  105 20)
-   (make-color 129 74  25)
-   (make-color 129 38  192)
-   (make-color 160 160 160)
-   (make-color 129 197 122)
-   (make-color 157 175 255)
-   (make-color 41  208 208)
-   (make-color 255 146 51)
-   (make-color 255 238 51)
-   (make-color 233 222 187)
-   (make-color 255 205 243)))
+   (make-color 65  65  65)
+   (make-color 130 26  26)
+   (make-color 32  56  161)
+   (make-color 22  79  15)
+   (make-color 97  56  19)
+   (make-color 97  28  144)
+   (make-color 120 120 120)
+   (make-color 97  148 92)
+   (make-color 118 131 191)
+   (make-color 31  156 156)
+   (make-color 191 110 38)
+   (make-color 191 178 38)
+   (make-color 175 166 140)
+   (make-color 191 154 182)))
 
 ;---
 
@@ -32,7 +32,7 @@
    (make-color 98  116 93)        ;2
    (make-color 36  139 64)        ;3
    (make-color 1   75  13)        ;4
-   "DarkGray"                     ;5 
+   (make-color 169 169 169)       ;5 
    (make-color 75  181 67  3/4)   ;6 green-sucess
    (make-color 192 32  32  3/4))) ;7 red-error
 
@@ -42,7 +42,7 @@
   (list
    (rs-read "sounds/error_sound.wav")   ;0 error-sound
    (rs-read "sounds/dinosar_sound.wav") ;1 dinosar_sound)
-   (rs-read "sounds/final_sound.wav")))  ;2 final_sound) 
+   (rs-read "sounds/final_sound.wav"))) ;2 final_sound) 
 
 ;---
 
