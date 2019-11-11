@@ -141,6 +141,9 @@
        (when (send event button-down?)
          (define dc           (get-dc))
          (define curr-kinship (get-kinship event))
+         (define fst-kinship  (if (or (not kinship) (null? kinship))
+                                  null
+                                  (car kinship)))
          
          (cond
            [(and curr-kinship (not (equal? kinship curr-kinship))) 
@@ -161,7 +164,7 @@
                  [_
                   (display-answer dc selected-node 'error)
                   (sleep/yield 1/2)
-                  (draw-bgs dc selected-node)])
+                  (draw-bgs dc selected-node fst-kinship)])
 
                (set! kinship       #f)
                (set! selected-node #f)]
@@ -175,7 +178,7 @@
             (when kinship
               (set! kinship #f))
             (when selected-node
-              (draw-bgs dc selected-node)
+              (draw-bgs dc selected-node fst-kinship)
               (set! selected-node #f))])))
      
      (super-new
@@ -465,6 +468,8 @@
     [else
      (define rst-kin (cdr kinship))
      (match (car kinship)
+       ['var
+        node]
        ['argt
         (define argt (lambd-argt node))
         (get-node-by-kinship argt rst-kin)]
@@ -501,21 +506,25 @@
 
 ;---
 
-(define (draw-bgs dc node)
+(define (draw-bgs dc node [parent #f])
   (match node
     [(var/argt _ _)
-     (draw-bg dc node #:figure 'egg)]
+     (define figure (match parent
+                      [(or 'argt 'elder) parent]
+                      [_ 'var]))
+     (draw-bg dc node #:figure figure)]
     [(lambd argt child _)
      (draw-bg dc node)
-     (draw-bg dc argt #:figure 'trex)
+     (draw-bg dc argt #:figure 'argt)
      (draw-bgs dc child)]
     [(bracket elder child1 child2 _)
      (draw-bg dc node)
-     (draw-bg dc elder #:figure 'triceratops)
+     (draw-bg dc elder #:figure 'elder)
      (draw-bgs dc child1)
-     (draw-bgs dc child2)]))
+     (draw-bgs dc child2)]
+    [_ (void)]))
 
-(define (draw-bg dc node [color1 #f] #:figure [figure #f])
+(define (draw-bg dc node [color1 #f] #:figure [type #f])
   (define spcs    (obtain-specs node))
   (match-define   (specs x y width height color2) spcs)
   (define color*  (cond [color1] [color2]))
@@ -523,6 +532,12 @@
   (send dc set-pen "DarkGray" 1 'hilite)
   (send dc set-brush color** 'solid)
   (draw-rounded-rectangle dc x y width height)
+  
+  (define figure (match type
+                   ['argt  'trex]
+                   ['elder 'triceratops]
+                   ['var   'egg]
+                   [_      #f]))
   (when figure
     (define bitmap (bitmap-figure figure))
     (define scale  (* width (match figure
